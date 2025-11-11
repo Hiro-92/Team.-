@@ -1,0 +1,40 @@
+# Node / npm
+node_modules/
+frontend/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Builds
+dist/
+frontend/dist/
+build/
+frontend/build/
+coverage/
+.parcel-cache/
+*.tsbuildinfo
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Data exports & caches
+data/*.json
+data/*.csv
+
+# Logs & temp
+*.log
+logs/
+tmp/
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Jest
+*.jest.cache
+
