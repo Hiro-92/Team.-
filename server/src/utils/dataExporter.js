@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const DATA_DIR = path.join(process.cwd(), 'data');
+const DATA_DIR = path.join(__dirname, '..', '..', 'data');
 const DOCUMENTS_JSON = path.join(DATA_DIR, 'documents.json');
 const DOCUMENTS_CSV = path.join(DATA_DIR, 'documents.csv');
 const INDEX_JSON = path.join(DATA_DIR, 'index.json');

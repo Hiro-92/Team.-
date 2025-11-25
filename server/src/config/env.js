@@ -2,7 +2,7 @@ const path = require('path');
 const dotenv = require('dotenv');
 
 dotenv.config({
-  path: path.resolve(process.cwd(), '.env')
+  path: path.resolve(__dirname, '..', '..', '..', '.env')
 });
 
 const toNumberOrDefault = (value, defaultValue) => {
@@ -19,7 +19,6 @@ const parseLanguages = (value, fallback) => {
 };
 
 const PORT = toNumberOrDefault(process.env.PORT, 4000);
-const MONGO_URI = process.env.MONGO_URI || '';
 const DEFAULT_RANKING = (process.env.DEFAULT_RANKING || 'bm25').toLowerCase();
 const PAGE_SIZE = toNumberOrDefault(process.env.PAGE_SIZE, 10);
 const USE_REPO = (process.env.USE_REPO || 'memory').toLowerCase();
@@ -27,7 +26,6 @@ const ALLOWED_LANGUAGES = parseLanguages(process.env.ALLOWED_LANGUAGES || '', 'e
 
 module.exports = {
   PORT,
-  MONGO_URI,
   DEFAULT_RANKING,
   PAGE_SIZE,
   USE_REPO,

@@ -1,7 +1,7 @@
 const request = require('supertest');
 const nock = require('nock');
-const app = require('../../server');
-const repo = require('../../models/repositories');
+const app = require('../server');
+const repo = require('../src/models/repositories');
 
 describe('Search API end-to-end', () => {
   beforeAll(() => {

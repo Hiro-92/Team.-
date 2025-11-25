@@ -1,7 +1,7 @@
 const express = require('express');
 const morgan = require('morgan');
-const { PORT } = require('./config/env');
-const apiRoutes = require('./api/routes');
+const { PORT } = require('./src/config/env');
+const apiRoutes = require('./src/routes');
 
 const app = express();
 

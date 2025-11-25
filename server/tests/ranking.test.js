@@ -1,4 +1,4 @@
-const { rank } = require('../../services/rankingService');
+const { rank } = require('../src/services/rankingService');
 
 function buildVectors() {
   const documents = new Map([

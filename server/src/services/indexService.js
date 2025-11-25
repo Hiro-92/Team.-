@@ -3,7 +3,7 @@ const repo = require('../models/repositories');
 const { canonicalizeURL } = require('../utils/url');
 const { tokenize, languageDetect, normalizeLanguageCode } = require('../utils/tokenizer');
 const { signatureFromDoc } = require('../utils/deduplicate');
-const { createDocument } = require('../domain/document');
+const { createDocument } = require('../models/Document');
 const { ALLOWED_LANGUAGES } = require('../config/env');
 
 const allowedLanguageSet = new Set(ALLOWED_LANGUAGES);

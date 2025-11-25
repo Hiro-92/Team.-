@@ -8,7 +8,7 @@ class FileRepo extends Repository {
     super();
     this.filePath =
       options.filePath ||
-      path.join(process.cwd(), 'data', 'store.json');
+      path.join(__dirname, '..', '..', '..', 'data', 'store.json');
     this.store = {
       documents: {},
       invertedIndex: {},

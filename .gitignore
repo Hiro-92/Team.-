@@ -1,6 +1,7 @@
 # Node / npm
 node_modules/
-frontend/node_modules/
+server/node_modules/
+client/node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
@@ -8,9 +9,9 @@ pnpm-debug.log*
 
 # Builds
 dist/
-frontend/dist/
+server/dist/
+client/dist/
 build/
-frontend/build/
 coverage/
 .parcel-cache/
 *.tsbuildinfo
@@ -21,8 +22,9 @@ coverage/
 .env.*.local
 
 # Data exports & caches
-data/*.json
-data/*.csv
+server/data/*.json
+server/data/*.csv
+server/data/store.json
 
 # Logs & temp
 *.log
