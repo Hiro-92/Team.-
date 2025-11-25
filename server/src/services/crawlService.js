@@ -1,12 +1,54 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
-const { canonicalizeURL } = require('../utils/url');
+const { canonicalizeURL, isAllowedLanguageURL, isContentURL } = require('../utils/url');
 const { indexDocument } = require('./indexService');
 const { signatureFromDoc } = require('../utils/deduplicate');
 const { normalizeLanguageCode } = require('../utils/tokenizer');
 const crawlingConfig = require('../config/crawling');
 
 const robotsCache = new Map();
+
+/**
+ * Issue #5 Fix: Retry logic with exponential backoff
+ * Retries failed requests with increasing delays
+ */
+async function fetchWithRetry(url, options, maxRetries = 3) {
+  let lastError;
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      const response = await axios.get(url, options);
+      return { success: true, response, attempt };
+    } catch (error) {
+      lastError = error;
+
+      // Don't retry on 404 (not found) or 403 (forbidden) - these won't change
+      if (error.response && [404, 403, 410].includes(error.response.status)) {
+        return {
+          success: false,
+          error,
+          statusCode: error.response.status,
+          shouldSkip: true,
+          attempt
+        };
+      }
+
+      // Exponential backoff: 1s, 2s, 4s
+      if (attempt < maxRetries - 1) {
+        const delay = Math.pow(2, attempt) * 1000;
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  }
+
+  return {
+    success: false,
+    error: lastError,
+    statusCode: lastError?.response?.status,
+    shouldSkip: false,
+    attempt: maxRetries
+  };
+}
 
 async function fetchRobots(origin, userAgent) {
   if (robotsCache.has(origin)) {
@@ -75,8 +117,32 @@ async function isAllowed(url, obeyRobots, userAgent) {
 
 function extractContent(html, url) {
   const $ = cheerio.load(html);
+
+  // Remove noise elements before extraction (Issue #1 fix)
+  $('script, style, nav, footer, header, aside, iframe, noscript').remove();
+  $('[role="navigation"], [role="banner"], [role="complementary"]').remove();
+
+  // Extract title
   const title = $('title').first().text().trim() || url;
-  const bodyText = $('body').text().replace(/\s+/g, ' ').trim();
+
+  // Extract main content - prioritize semantic HTML5 tags
+  let text = '';
+  const mainContent = $('main, article, [role="main"]').first();
+
+  if (mainContent.length > 0) {
+    // Found semantic content area
+    text = mainContent.text();
+  } else {
+    // Fallback: extract from paragraphs and headings only (skip noise)
+    const contentElements = $('p, h1, h2, h3, h4, h5, h6, li, td, th');
+    const paragraphs = contentElements.map((_, el) => $(el).text().trim()).get();
+    text = paragraphs.filter(p => p.length > 0).join(' ');
+  }
+
+  // Clean whitespace
+  text = text.replace(/\s+/g, ' ').trim();
+
+  // Extract links
   const links = [];
   const htmlLang = normalizeLanguageCode($('html').attr('lang') || $('html').attr('xml:lang'));
 
@@ -86,7 +152,9 @@ function extractContent(html, url) {
     try {
       const absolute = new URL(href, url).toString();
       const canonical = canonicalizeURL(absolute);
-      if (canonical) {
+
+      // Issue #2 fix: Filter URLs by language and content type
+      if (canonical && isAllowedLanguageURL(canonical) && isContentURL(canonical)) {
         links.push(canonical);
       }
     } catch (err) {
@@ -94,7 +162,7 @@ function extractContent(html, url) {
     }
   });
 
-  return { title, text: bodyText, links, lang: htmlLang };
+  return { title, text, links, lang: htmlLang };
 }
 
 async function crawl({
@@ -116,7 +184,12 @@ async function crawl({
       duplicates: 0,
       visited: 0,
       errors: 0,
-      language: 0
+      language: 0,
+      filteredURL: 0,  // Issue #2: Track URLs filtered by language/content type
+      notFound: 0,     // Issue #5: 404 errors
+      forbidden: 0,    // Issue #5: 403 errors
+      timeout: 0,      // Issue #5: Timeout errors
+      retried: 0       // Issue #5: Successfully retried requests
     }
   };
 
@@ -146,21 +219,43 @@ async function crawl({
 
     visited.add(next.url);
 
-    try {
-      const response = await axios.get(next.url, {
-        timeout: 10000,
-        headers: {
-          'User-Agent': userAgent,
-          Accept: 'text/html'
-        }
-      });
-
-      const contentType = response.headers['content-type'] || '';
-      if (!contentType.includes('text/html')) {
-        summary.skipped.invalid += 1;
-        continue;
+    // Issue #5: Use retry logic with exponential backoff
+    const result = await fetchWithRetry(next.url, {
+      timeout: 15000, // Increased from 10s to 15s
+      headers: {
+        'User-Agent': userAgent,
+        Accept: 'text/html',
+        'Accept-Language': 'en-US,en;q=0.9' // Prefer English content
       }
+    }, 3); // Max 3 retries
 
+    // Handle fetch result with error categorization
+    if (!result.success) {
+      if (result.statusCode === 404) {
+        summary.skipped.notFound += 1;
+      } else if (result.statusCode === 403) {
+        summary.skipped.forbidden += 1;
+      } else if (result.error?.code === 'ECONNABORTED' || result.error?.code === 'ETIMEDOUT') {
+        summary.skipped.timeout += 1;
+      } else {
+        summary.skipped.errors += 1;
+      }
+      continue;
+    }
+
+    // Track successful retries
+    if (result.attempt > 0) {
+      summary.skipped.retried += 1;
+    }
+
+    const response = result.response;
+    const contentType = response.headers['content-type'] || '';
+    if (!contentType.includes('text/html')) {
+      summary.skipped.invalid += 1;
+      continue;
+    }
+
+    try {
       const { title, text, links, lang } = extractContent(response.data, next.url);
 
       const signature = signatureFromDoc({ url: next.url, title });

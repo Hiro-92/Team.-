@@ -1,4 +1,4 @@
-const { bm25, tfidf, defaultStrategy } = require('../config/ranking');
+const { bm25, tfidf, relevance, defaultStrategy } = require('../config/ranking');
 
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 
@@ -25,6 +25,13 @@ function tfIdfScore({ termFrequency, df, stats }) {
   return clamp(score, 0, tfidf.maxBoost);
 }
 
+/**
+ * Issue #4 Fix: Enhanced ranking with quality filters
+ * - Minimum matched terms requirement
+ * - Minimum term frequency threshold
+ * - Title boost for query term matches
+ * - Minimum score threshold
+ */
 function rank(queryTokens = [], docVectors = {}, strategy = defaultStrategy) {
   const { documents, docFrequency, stats } = docVectors;
   if (!documents || documents.size === 0) {
@@ -39,11 +46,17 @@ function rank(queryTokens = [], docVectors = {}, strategy = defaultStrategy) {
   documents.forEach((vector, docId) => {
     let score = 0;
     const matchedTokens = [];
+    let totalTermFrequency = 0;
 
     uniqueTokens.forEach((token) => {
       const df = docFrequency.get(token) || 0;
       const termFrequency = vector.termFrequencies[token];
       if (!termFrequency || df === 0) return;
+
+      // Issue #4: Check minimum term frequency (only for multi-term queries)
+      if (uniqueTokens.length > 1 && termFrequency < relevance.minTermFrequency) {
+        return; // Skip terms that appear too infrequently
+      }
 
       score += scoringFn({
         termFrequency,
@@ -52,13 +65,36 @@ function rank(queryTokens = [], docVectors = {}, strategy = defaultStrategy) {
         stats
       });
       matchedTokens.push(token);
+      totalTermFrequency += termFrequency;
     });
+
+    // Issue #4: Filter 1 - Require minimum matched terms (only for multi-term queries)
+    if (uniqueTokens.length >= relevance.minMatchedTerms && matchedTokens.length < relevance.minMatchedTerms) {
+      return; // Skip if not enough query terms matched
+    }
+
+    // Issue #4: Filter 2 - Require minimum score
+    if (score < relevance.minScore) {
+      return; // Skip low-scoring documents
+    }
+
+    // Issue #4: Quality Signal - Title boost
+    if (vector.document && vector.document.title) {
+      const titleLower = vector.document.title.toLowerCase();
+      const titleMatches = matchedTokens.filter(token => titleLower.includes(token));
+      if (titleMatches.length > 0) {
+        // Boost score if query terms appear in title
+        score *= relevance.titleBoost;
+      }
+    }
 
     if (score > 0) {
       results.push({
         docId,
         score,
         tokens: matchedTokens,
+        matchedTermCount: matchedTokens.length,
+        totalTermFrequency,
         document: vector.document
       });
     }
