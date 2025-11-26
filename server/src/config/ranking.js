@@ -23,10 +23,20 @@ const relevance = {
   minScore: toNumber(process.env.MIN_SCORE, 0.01) // Minimum score to be included in results (very lenient)
 };
 
+// Issue #6: PageRank configuration
+const pagerank = {
+  enabled: process.env.PAGERANK_ENABLED !== 'false', // Enable PageRank by default
+  dampingFactor: toNumber(process.env.PAGERANK_DAMPING, 0.85), // Standard damping factor
+  maxIterations: toNumber(process.env.PAGERANK_ITERATIONS, 20), // Max iterations
+  convergenceThreshold: toNumber(process.env.PAGERANK_CONVERGENCE, 0.0001), // Convergence threshold
+  boost: toNumber(process.env.PAGERANK_BOOST, 1.2) // How much to boost high-PageRank results
+};
+
 module.exports = {
   bm25,
   tfidf,
   relevance,
+  pagerank,
   defaultStrategy: DEFAULT_RANKING
 };
 

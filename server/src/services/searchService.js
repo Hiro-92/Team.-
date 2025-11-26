@@ -105,23 +105,24 @@ async function search(query, options = {}) {
     avgDocLength: totalDocLength === 0 ? 0 : totalDocLength / docAccum.size
   };
 
-  const ranked = rank(queryTokens, {
+  const ranked = await rank(queryTokens, {
     documents: docAccum,
     docFrequency,
     stats
-  }, strategy);
+  }, strategy, options);
 
   const total = ranked.length;
   const paginated = paginate(ranked, page, size);
 
   const items = paginated.map((entry) => {
-    const { document, score, tokens } = entry;
+    const { document, score, tokens, pagerank: prScore } = entry;
     const snippet = createSnippet(document.text, queryTokens);
     return {
       url: document.url,
       title: document.title,
       snippet,
       score,
+      pagerank: prScore,
       highlights: tokens,
       lang: document.lang
     };

@@ -1,4 +1,5 @@
-const { bm25, tfidf, relevance, defaultStrategy } = require('../config/ranking');
+const { bm25, tfidf, relevance, pagerank, defaultStrategy } = require('../config/ranking');
+const { computePageRank } = require('./pagerankService');
 
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 
@@ -27,12 +28,14 @@ function tfIdfScore({ termFrequency, df, stats }) {
 
 /**
  * Issue #4 Fix: Enhanced ranking with quality filters
+ * Issue #6 Fix: PageRank boost for authority signals
  * - Minimum matched terms requirement
  * - Minimum term frequency threshold
  * - Title boost for query term matches
  * - Minimum score threshold
+ * - PageRank boost for authoritative documents
  */
-function rank(queryTokens = [], docVectors = {}, strategy = defaultStrategy) {
+async function rank(queryTokens = [], docVectors = {}, strategy = defaultStrategy, options = {}) {
   const { documents, docFrequency, stats } = docVectors;
   if (!documents || documents.size === 0) {
     return [];
@@ -40,6 +43,17 @@ function rank(queryTokens = [], docVectors = {}, strategy = defaultStrategy) {
 
   const scoringFn = strategy === 'tfidf' ? tfIdfScore : bm25Score;
   const uniqueTokens = Array.from(new Set(queryTokens.map((token) => token.toLowerCase())));
+
+  // Issue #6: Compute PageRank if enabled
+  let pagerankScores = new Map();
+  if (pagerank.enabled && !options.skipPageRank) {
+    const result = await computePageRank({
+      dampingFactor: pagerank.dampingFactor,
+      maxIterations: pagerank.maxIterations,
+      convergenceThreshold: pagerank.convergenceThreshold
+    });
+    pagerankScores = result.ranks;
+  }
 
   const results = [];
 
@@ -88,6 +102,14 @@ function rank(queryTokens = [], docVectors = {}, strategy = defaultStrategy) {
       }
     }
 
+    // Issue #6: Quality Signal - PageRank boost
+    if (pagerank.enabled && pagerankScores.has(docId)) {
+      const prScore = pagerankScores.get(docId);
+      // Apply PageRank boost: higher PR = higher boost (1.0 to pagerank.boost)
+      const prBoost = 1.0 + (prScore * (pagerank.boost - 1.0));
+      score *= prBoost;
+    }
+
     if (score > 0) {
       results.push({
         docId,
@@ -95,6 +117,7 @@ function rank(queryTokens = [], docVectors = {}, strategy = defaultStrategy) {
         tokens: matchedTokens,
         matchedTermCount: matchedTokens.length,
         totalTermFrequency,
+        pagerank: pagerankScores.get(docId) || 0,
         document: vector.document
       });
     }
